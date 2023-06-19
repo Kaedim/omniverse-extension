@@ -1,12 +1,13 @@
 import omni.ext
 import omni.ui as ui
-import requests
 import json
-import urllib.request
 import os
 import omni.kit.commands
 import omni.usd
 from pxr import Sdf
+from urllib.request import Request, urlretrieve, urlopen
+from urllib.error import URLError
+import http.client
 
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
 # instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
@@ -42,7 +43,8 @@ class KaedimExtensionExtension(omni.ext.IExt):
             json.dump(data, f, indent=4)
 
     def login(self, devID, apiKey):
-        url = "https://api.kaedim3d.com/api/v1/registerHook"
+
+        conn = http.client.HTTPSConnection("api.kaedim3d.com")
         payload = json.dumps({
             "devID": devID,
             "destination": "https://nvidia.kaedim3d.com/hook"
@@ -51,17 +53,18 @@ class KaedimExtensionExtension(omni.ext.IExt):
             'X-API-Key': apiKey,
             'Content-Type': 'application/json'
         }
-        response = requests.request("POST", url, headers=headers, data=payload)
-        print(response.text)
-        data = json.loads(response.text)
+        conn.request("POST", "/api/v1/registerHook", payload, headers)
+        res = conn.getresponse()
+        data = res.read()
+        print(data)
+        data = json.loads(data)
         if data["status"] == "success":
             self.jwt = data["jwt"]
             return True
         return False
 
     def refresh_jwt(self, devID, apiKey, rToken):
-        print(devID, apiKey, rToken)
-        url = "https://api.kaedim3d.com/api/v1/refreshJWT"
+        print(rToken)
         payload = json.dumps({
             "devID": devID
         })
@@ -70,11 +73,13 @@ class KaedimExtensionExtension(omni.ext.IExt):
             'refresh-token': rToken,
             'Content-Type': 'application/json'
         }
-        response = requests.request("POST", url, headers=headers, data=payload)
-        data = json.loads(response.text)
+        conn = http.client.HTTPSConnection("api.kaedim3d.com")
+        conn.request("POST", "/api/v1/refreshJWT", payload, headers)
+        res = conn.getresponse()
+        data = res.read()
         print(data)
+        data = json.loads(data)
         if data["status"] == "success":
-            print(data['jwt'])
             return data["jwt"]
         return None
 
@@ -97,6 +102,10 @@ class KaedimExtensionExtension(omni.ext.IExt):
                         "refreshToken": rToken.as_string,
                         "jwt": jwt
                     }
+                    self.devID = devID.as_string
+                    self.apiKey = apiKey.as_string
+                    self.refreshToken = rToken.as_string
+                    self.jwt = jwt
                     self.update_json_file(credentials) 
                     self.load_ui(ext_id)
                     label.text = 'Successfully logged in'
@@ -141,7 +150,8 @@ class KaedimExtensionExtension(omni.ext.IExt):
                 )
 
         def fetch_assets():
-            url = "https://api.kaedim3d.com/api/v1/fetchAll/?devID=b6ef2632-0625-490a-9876-fd852cfc6d33"
+            conn = http.client.HTTPSConnection("api.kaedim3d.com")
+            print('data', self.devID, self.apiKey, self.jwt)
             payload = json.dumps({
                 "devID": self.devID
             })
@@ -150,18 +160,22 @@ class KaedimExtensionExtension(omni.ext.IExt):
                 'Authorization': self.jwt,
                 'Content-Type': 'application/json'
             }
-            response = requests.request("GET", url, headers=headers, data=payload)
-
+            conn.request("GET", "/api/v1/fetchAll/", payload, headers)
+            res = conn.getresponse()
+            data = res.read()
+            print(data)
             jwt = ''
-            if response.status_code == 401:
+            if res.status == 401:
                 self.jwt = self.refresh_jwt(self.devID, self.apiKey, self.refreshToken)
                 headers["Authorization"] = self.jwt
-                response = requests.request("GET", url, headers=headers, data=payload)
-            if response.status_code == 200:
+                conn.request("GET", "/api/v1/fetchAll/", payload, headers)
+                res = conn.getresponse()
+                data = res.read()
+            if res.status == 200:
                 if jwt:
                     credentials = {"jwt": self.jwt}
                     self.update_json_file(credentials)
-                data = json.loads(response.text)
+                data = json.loads(data)
                 assets = data["assets"]
                 asset_library_ui(assets)
                 if len(assets) <= 0:
@@ -185,7 +199,7 @@ class KaedimExtensionExtension(omni.ext.IExt):
             if not os.path.isfile(file_path):
                 # Download and save the file from the url
                 try:
-                    urllib.request.urlretrieve(url, file_path)
+                    urlretrieve(url, file_path)
             #         print(f"File downloaded and saved as {filename} in the folder {folder_path}.")
                 except Exception as e:
                     print(f"Error occurred while downloading the file: {e}")
