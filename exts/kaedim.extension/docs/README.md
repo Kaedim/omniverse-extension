@@ -1,4 +1,7 @@
-# Python Extension Example [kaedim.extension]
+# Kaedim Omniverse Etesion [kaedim.extension]
 
-This is an example of pure python Kit extension. It is intended to be copied and serve as a template to create new extensions.
+This project is the kaedim omniverse plugin
 
+It currently supports login functionality and file import 
+
+Documentation on how to ise the plugin is linked here: https://docs.google.com/document/d/1fqclE2bfRH_RgXyCNmCKX2DZF5y6ZT9OYANDNyyiY5M/edit?usp=sharing
